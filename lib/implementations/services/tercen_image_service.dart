@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:archive/archive.dart';
 import 'package:pamsoft_grid_flutter_operator/models/image_metadata.dart';
 import 'package:pamsoft_grid_flutter_operator/models/experiment_data.dart';
 import 'package:pamsoft_grid_flutter_operator/services/image_service.dart';
@@ -11,9 +10,10 @@ import 'package:sci_tercen_context/src/context/operator_context.dart';
 
 /// Tercen implementation of ImageService.
 ///
-/// Loads images from Tercen ZIP files instead of assets.
-/// Uses lazy loading: downloads ZIP once, but only extracts/converts images on demand.
-/// Grid image grouping comes from Tercen column data (grdImageNameUsed/Image columns).
+/// Loads image metadata from a Tercen ZIP via FileService.listZipContents
+/// (no full-ZIP download) and fetches individual TIFFs on demand via
+/// FileService.downloadZipEntry. Grid image grouping comes from Tercen
+/// column data (grdImageNameUsed/Image columns).
 class TercenImageService implements ImageService {
   final ServiceFactory _factory;
   final TercenUrlParser _urlParser;
@@ -23,9 +23,12 @@ class TercenImageService implements ImageService {
   ExperimentData? _cachedData;
   final Map<String, Uint8List> _imageCache = {};
 
-  // ZIP archive (downloaded once, extracted lazily)
-  Archive? _archive;
+  // The Tercen FileDocument id for the ZIP and a map from image id (parsed
+  // from filename) to ZIP entry path. The ZIP itself is never downloaded;
+  // listZipContents gives us names + sizes, and individual TIFFs are
+  // fetched on demand through downloadZipEntry.
   String? _loadedDocumentId;
+  final Map<String, String> _entryPathByImageId = {};
 
   TercenImageService(this._factory, this._urlParser, this._mockService);
 
@@ -49,9 +52,10 @@ class TercenImageService implements ImageService {
       final documentId = resolvedIds.documentId!;
       print('Resolved .documentId: $documentId');
 
-      // Download ZIP and extract metadata (but don't convert images yet)
-      final images = await _downloadZipAndExtractMetadata(documentId);
-      print('Found ${images.length} images in ZIP (will convert on demand)');
+      // List ZIP entries (cheap metadata fetch — no full-ZIP download).
+      // Individual TIFFs are fetched on demand in getImageBytes().
+      final images = await _listZipEntriesAndExtractMetadata(documentId);
+      print('Found ${images.length} images in ZIP (will fetch on demand)');
 
       // Fetch Tercen column data for grid image grouping
       final tercenGrouping = await _fetchTercenGrouping();
@@ -133,51 +137,35 @@ class TercenImageService implements ImageService {
     }
   }
 
-  /// Downloads ZIP file and extracts metadata only (lazy loading).
-  /// Images are converted on-demand in getImageBytes().
-  Future<List<ImageMetadata>> _downloadZipAndExtractMetadata(String documentId) async {
+  /// Lists ZIP entries via FileService.listZipContents and builds image
+  /// metadata. The ZIP itself is never downloaded — only entry names are
+  /// fetched. The mapping imageId → entry path is kept so getImageBytes
+  /// can stream individual TIFFs through FileService.downloadZipEntry.
+  Future<List<ImageMetadata>> _listZipEntriesAndExtractMetadata(
+      String documentId) async {
     try {
-      // Download ZIP file from Tercen
       final fileService = _factory.fileService;
 
-      print('📥 Downloading ZIP for .documentId: $documentId');
+      print('📥 Listing ZIP entries for .documentId: $documentId');
+      final entries = await fileService.listZipContents(documentId);
 
-      // Accumulate chunks from stream
-      final chunks = <List<int>>[];
-      await for (final chunk in fileService.download(documentId)) {
-        chunks.add(chunk);
-      }
-
-      // Combine chunks into single byte array
-      final totalLength = chunks.fold<int>(0, (sum, chunk) => sum + chunk.length);
-      final zipBytes = Uint8List(totalLength);
-      int offset = 0;
-      for (final chunk in chunks) {
-        zipBytes.setRange(offset, offset + chunk.length, chunk);
-        offset += chunk.length;
-      }
-
-      print('✓ Downloaded ${zipBytes.length} bytes');
-
-      // Decode ZIP archive (but don't extract files yet)
-      _archive = ZipDecoder().decodeBytes(zipBytes);
       _loadedDocumentId = documentId;
+      _entryPathByImageId.clear();
 
-      print('📂 ZIP archive contains ${_archive!.files.length} files');
+      print('📂 ZIP archive contains ${entries.length} entries');
 
-      // Extract metadata only (no TIFF conversion yet)
       final images = <ImageMetadata>[];
-
-      for (final file in _archive!.files) {
-        if (file.isFile && file.name.contains('ImageResults/') && file.name.endsWith('.tif')) {
-          // Extract filename from path
-          final filename = file.name.split('/').last;
-
-          // Parse filename to create ImageMetadata
+      for (final entry in entries) {
+        if (entry.isDirectory) continue;
+        if (entry.name.contains('ImageResults/') &&
+            entry.name.endsWith('.tif')) {
+          // Extract filename from path and parse it into ImageMetadata
+          final filename = entry.name.split('/').last;
           final metadata = parseFilename(filename);
           images.add(metadata);
+          _entryPathByImageId[metadata.id] = entry.name;
 
-          print('  Found: ${filename}');
+          print('  Found: $filename');
         }
       }
 
@@ -185,7 +173,7 @@ class TercenImageService implements ImageService {
 
       return images;
     } catch (e) {
-      print('✗ Error downloading ZIP for $documentId: $e');
+      print('✗ Error listing ZIP entries for $documentId: $e');
       rethrow;
     }
   }
@@ -305,51 +293,54 @@ class TercenImageService implements ImageService {
       return _imageCache[imageId];
     }
 
-    // Ensure ZIP is loaded
-    if (_archive == null) {
+    // Ensure metadata is loaded
+    if (_loadedDocumentId == null) {
       print('  Loading experiment data first...');
       await loadExperimentData();
     }
+    if (_loadedDocumentId == null) {
+      print('  ✗ No documentId available');
+      return null;
+    }
 
-    if (_archive == null) {
-      print('  ✗ No archive available');
+    final entryPath = _entryPathByImageId[imageId];
+    if (entryPath == null) {
+      print('  ✗ No ZIP entry mapping for imageId: $imageId');
       return null;
     }
 
     try {
-      // Find the TIFF file in the archive
-      print('  🔍 Extracting and converting: $imageId.tif');
+      print('  📥 Fetching ZIP entry: $entryPath');
+      final fileService = _factory.fileService;
 
-      for (final file in _archive!.files) {
-        if (file.isFile &&
-            file.name.contains('ImageResults/') &&
-            file.name.endsWith('$imageId.tif')) {
-
-          // Extract TIFF bytes
-          final tiffBytes = file.content as List<int>;
-          final tiffData = Uint8List.fromList(tiffBytes);
-
-          print('    Converting TIFF (${tiffBytes.length} bytes)');
-
-          // Convert TIFF to PNG
-          final pngBytes = TiffConverter.tiffToPng(tiffData);
-
-          if (pngBytes != null) {
-            // Cache the result
-            _imageCache[imageId] = pngBytes;
-            print('    ✓ Converted to PNG (${pngBytes.length} bytes)');
-            return pngBytes;
-          } else {
-            print('    ✗ Failed to convert TIFF to PNG');
-            return null;
-          }
-        }
+      // Stream the single TIFF entry from the server
+      final chunks = <List<int>>[];
+      await for (final chunk
+          in fileService.downloadZipEntry(_loadedDocumentId!, entryPath)) {
+        chunks.add(chunk);
       }
 
-      print('  ✗ Image not found in archive: $imageId');
-      return null;
+      final totalLength = chunks.fold<int>(0, (s, c) => s + c.length);
+      final tiffData = Uint8List(totalLength);
+      var offset = 0;
+      for (final chunk in chunks) {
+        tiffData.setRange(offset, offset + chunk.length, chunk);
+        offset += chunk.length;
+      }
+
+      print('    Converting TIFF (${tiffData.length} bytes)');
+      final pngBytes = TiffConverter.tiffToPng(tiffData);
+
+      if (pngBytes != null) {
+        _imageCache[imageId] = pngBytes;
+        print('    ✓ Converted to PNG (${pngBytes.length} bytes)');
+        return pngBytes;
+      } else {
+        print('    ✗ Failed to convert TIFF to PNG');
+        return null;
+      }
     } catch (e) {
-      print('  ✗ Error extracting image $imageId: $e');
+      print('  ✗ Error fetching/converting ZIP entry $entryPath: $e');
       return null;
     }
   }
