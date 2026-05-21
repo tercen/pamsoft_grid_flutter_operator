@@ -24,8 +24,17 @@ version: 0.0.2  # Change this to your new version
 
 ### 2. Rebuild the app
 ```bash
-flutter build web --wasm
+flutter build web
 ```
+
+> **Do not pass `--wasm`.** It produces a `dart2wasm + skwasm` bundle whose
+> bitmap rendering path is incompatible with the operator's TIFF→PNG
+> conversion (the grid overlay renders, but `Image.memory()` shows
+> "Failed to load image" on the current Flutter SDK). The plain
+> `flutter build web` target — `dart2js + canvaskit` — matches what was
+> actually deployed at `0.0.2` and works in prod. Re-enable `--wasm` only
+> after verifying the skwasm renderer end-to-end against the operator's
+> image pipeline.
 
 ### 3. Commit changes
 ```bash
