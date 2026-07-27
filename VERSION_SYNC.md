@@ -24,8 +24,17 @@ version: 0.0.2  # Change this to your new version
 
 ### 2. Rebuild the app
 ```bash
-flutter build web --wasm
+flutter build web
 ```
+
+> ⚠️ **Do not add `--wasm`.** It builds with `dart2wasm` + the `skwasm` renderer, where
+> `Image.memory()` fails to render the PNGs decoded from the TIFF images — you get "Failed to
+> load image" placeholders while the grid overlay still draws on top, which looks like a data
+> problem rather than a renderer problem.
+>
+> Plain `flutter build web` produces `dart2js` + `canvaskit`, which is what every working
+> deployed build of this operator has used (verify with `"compileTarget":"dart2js"` in
+> `build/web/flutter_bootstrap.js`).
 
 ### 3. Commit changes
 ```bash
