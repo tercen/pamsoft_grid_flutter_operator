@@ -35,6 +35,9 @@ flutter build web
 > Plain `flutter build web` produces `dart2js` + `canvaskit`, which is what every working
 > deployed build of this operator has used (verify with `"compileTarget":"dart2js"` in
 > `build/web/flutter_bootstrap.js`).
+>
+> Re-enable `--wasm` only after verifying the skwasm renderer end-to-end against the
+> operator's image pipeline.
 
 ### 3. Commit changes
 ```bash

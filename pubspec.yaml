@@ -1,7 +1,7 @@
 name: pamsoft_grid_flutter_operator
 description: "Quality control application for reviewing automated fiducial grid fitting on Pamstation experiment images."
 publish_to: 'none'
-version: 0.0.1
+version: 0.0.3
 
 environment:
   sdk: ^3.10.1

@@ -53,8 +53,52 @@ class TercenGridService implements GridService {
     final ctx = await _getContext();
 
     print('📋 Fetching ALL Tercen data (one-time)...');
-    final qtData = await ctx.select(names: ['.ci', '.ri', '.y']);
-    print('✓ qtData: ${qtData.nRows} rows');
+
+    // Build dataMap incrementally by paging through the main table.
+    // Server caps a single select() at 1,600,000 rows (table.limit / Bad limit),
+    // so we chunk under that ceiling and feed each chunk straight into dataMap.
+    const selectChunkSize = 1000000;
+    final mainSchema = await ctx.schema;
+    final totalQtRows = mainSchema.nRows;
+    final dataMap = <int, Map<int, double>>{};
+    int qtRowsLoaded = 0;
+    int qtOffset = 0;
+    while (qtOffset < totalQtRows) {
+      final remaining = totalQtRows - qtOffset;
+      final thisLimit = remaining < selectChunkSize ? remaining : selectChunkSize;
+      final qtChunk = await ctx.select(
+        names: ['.ci', '.ri', '.y'],
+        offset: qtOffset,
+        limit: thisLimit,
+      );
+      if (qtChunk.nRows == 0) break;
+
+      List ciValuesChunk = const [], riValuesChunk = const [];
+      List<double> yValuesChunk = const [];
+      for (final col in qtChunk.columns) {
+        switch (col.name) {
+          case '.ci':
+            ciValuesChunk = col.values as List;
+          case '.ri':
+            riValuesChunk = col.values as List;
+          case '.y':
+            yValuesChunk =
+                (col.values as List).map((v) => (v as num).toDouble()).toList();
+        }
+      }
+      for (int i = 0; i < ciValuesChunk.length; i++) {
+        final ci = (ciValuesChunk[i] as num).toInt();
+        final ri = (riValuesChunk[i] as num).toInt();
+        dataMap.putIfAbsent(ci, () => {});
+        dataMap[ci]![ri] = yValuesChunk[i];
+      }
+
+      qtRowsLoaded += qtChunk.nRows;
+      qtOffset += qtChunk.nRows;
+      print(
+          '  qtData chunk @ offset=${qtOffset - qtChunk.nRows}: ${qtChunk.nRows} rows ($qtRowsLoaded / $totalQtRows)');
+    }
+    print('✓ qtData: $qtRowsLoaded rows');
 
     final colData = await ctx.cselect();
     print('✓ colData: ${colData.nRows} rows, ${colData.columns.length} columns');
@@ -91,29 +135,7 @@ class TercenGridService implements GridService {
     }
     print('✓ Row metadata: $rowMetadata');
 
-    // Parse qtData columns
-    List ciValues = [], riValues = [];
-    List<double> yValues = [];
-    for (final col in qtData.columns) {
-      switch (col.name) {
-        case '.ci':
-          ciValues = col.values as List;
-        case '.ri':
-          riValues = col.values as List;
-        case '.y':
-          yValues = (col.values as List).map((v) => (v as num).toDouble()).toList();
-      }
-    }
-
-    // Build data map: ci -> {ri -> y}
-    final dataMap = <int, Map<int, double>>{};
-    for (int i = 0; i < ciValues.length; i++) {
-      final ci = (ciValues[i] as num).toInt();
-      final ri = (riValues[i] as num).toInt();
-      dataMap.putIfAbsent(ci, () => {});
-      dataMap[ci]![ri] = yValues[i];
-    }
-    print('✓ Data map: ${dataMap.length} spots, ${ciValues.length} total rows');
+    print('✓ Data map: ${dataMap.length} spots, $qtRowsLoaded total rows');
 
     // Build image lookup: imageName -> list of ci indices
     final allImages = <String>{};
