@@ -4,8 +4,11 @@ import 'package:pamsoft_grid_flutter_operator/implementations/services/mock_grid
 import 'package:pamsoft_grid_flutter_operator/implementations/services/mock_storage_service.dart';
 import 'package:pamsoft_grid_flutter_operator/implementations/services/tercen_image_service.dart';
 import 'package:pamsoft_grid_flutter_operator/implementations/services/tercen_grid_service.dart';
+import 'package:pamsoft_grid_flutter_operator/implementations/services/mock_properties_service.dart';
+import 'package:pamsoft_grid_flutter_operator/implementations/services/tercen_properties_service.dart';
 import 'package:pamsoft_grid_flutter_operator/services/image_service.dart';
 import 'package:pamsoft_grid_flutter_operator/services/grid_service.dart';
+import 'package:pamsoft_grid_flutter_operator/services/properties_service.dart';
 import 'package:pamsoft_grid_flutter_operator/services/storage_service.dart';
 import 'package:pamsoft_grid_flutter_operator/utils/tercen_url_parser.dart';
 import 'package:sci_tercen_client/sci_client_service_factory.dart' as tercen;
@@ -29,6 +32,7 @@ void setupServiceLocator({bool useMocks = true}) {
     locator.registerSingleton<ImageService>(MockImageService());
     locator.registerSingleton<GridService>(MockGridService());
     locator.registerSingleton<StorageService>(MockStorageService());
+    locator.registerSingleton<PropertiesService>(MockPropertiesService());
   } else {
     // Register Tercen services with mock fallback
     final factory = locator<tercen.ServiceFactory>();
@@ -46,6 +50,9 @@ void setupServiceLocator({bool useMocks = true}) {
       TercenGridService(factory, urlParser, mockGridService),
     );
     locator.registerSingleton<StorageService>(MockStorageService());
+    locator.registerSingleton<PropertiesService>(
+      TercenPropertiesService(factory, urlParser),
+    );
   }
 }
 

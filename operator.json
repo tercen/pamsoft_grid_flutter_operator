@@ -15,7 +15,70 @@
   ],
   "serve": "build/web",
   "properties": [
-
+    {
+      "kind": "DoubleProperty",
+      "name": "Min Diameter",
+      "defaultValue": 0.45,
+      "description": "Minimum spot diameter, as a fraction of the spot pitch."
+    },
+    {
+      "kind": "DoubleProperty",
+      "name": "Max Diameter",
+      "defaultValue": 0.85,
+      "description": "Maximum spot diameter, as a fraction of the spot pitch."
+    },
+    {
+      "kind": "DoubleProperty",
+      "name": "Saturation Limit",
+      "defaultValue": 4095,
+      "description": "Intensity above which a pixel counts as saturated."
+    },
+    {
+      "kind": "DoubleProperty",
+      "name": "Spot Pitch",
+      "defaultValue": 0,
+      "description": "Distance between spot centres in pixels. 0 auto-detects from the image dimensions (Evolve3 552x413 uses 17.0, Evolve2 697x520 uses 21.5)."
+    },
+    {
+      "kind": "DoubleProperty",
+      "name": "EdgeSensitivityLow",
+      "defaultValue": 0,
+      "description": "Lower bound of the edge sensitivity range."
+    },
+    {
+      "kind": "DoubleProperty",
+      "name": "Edge Sensitivity",
+      "defaultValue": 0.05,
+      "description": "Upper bound of the edge sensitivity range."
+    },
+    {
+      "kind": "DoubleProperty",
+      "name": "Spot Size",
+      "defaultValue": 0.66,
+      "description": "Fraction of the spot pitch a spot occupies. Drawn spot diameter is Spot Pitch multiplied by Spot Size."
+    },
+    {
+      "kind": "EnumeratedProperty",
+      "name": "Segmentation Method",
+      "defaultValue": "Edge",
+      "values": [
+        "Edge",
+        "Hough"
+      ],
+      "description": ""
+    },
+    {
+      "kind": "StringProperty",
+      "name": "Rotation",
+      "defaultValue": "-2:0.25:2",
+      "description": "Template rotation range in the format min:step:max (eg. -2:0.25:2) or 0 to perform intensity based registration."
+    },
+    {
+      "kind": "StringProperty",
+      "name": "Default Cycle",
+      "defaultValue": "highest",
+      "description": "Which image to select when a grid is opened: 'highest' for the highest-numbered cycle, 'grid' for the grid image itself, or an explicit cycle number such as 94."
+    }
   ],
   "auth": [""]
 }

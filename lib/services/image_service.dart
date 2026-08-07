@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'package:pamsoft_grid_flutter_operator/models/image_metadata.dart';
 import 'package:pamsoft_grid_flutter_operator/models/experiment_data.dart';
+import 'package:pamsoft_grid_flutter_operator/utils/tiff_converter.dart';
 
 /// Abstract interface for image service.
 ///
@@ -28,11 +28,22 @@ abstract class ImageService {
   /// [imageId] - The image identifier.
   String getImageAssetPath(String imageId);
 
-  /// Fetches TIFF image and converts to PNG bytes.
+  /// Fetches a TIFF image and decodes it for display.
   ///
   /// [imageId] - The image identifier.
-  /// Returns PNG bytes or null if conversion fails.
-  Future<Uint8List?> getImageBytes(String imageId);
+  /// Returns a [DecodedImage] or null if the fetch or decode fails.
+  ///
+  /// The caller owns the returned image and must [DecodedImage.dispose] it
+  /// once it is no longer displayed.
+  Future<DecodedImage?> getDecodedImage(String imageId);
+
+  /// Warms the cache for [imageId] so a later [getDecodedImage] is fast.
+  ///
+  /// Fetching dominates the cost of showing an image, so pulling neighbours
+  /// in the background is what makes stepping through cycles feel instant.
+  /// Errors are swallowed: a failed prefetch must never surface to the user,
+  /// it just means the real fetch happens later.
+  Future<void> prefetchImage(String imageId);
 
   /// Parses filename to extract metadata.
   ///

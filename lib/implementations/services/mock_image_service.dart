@@ -21,7 +21,7 @@ class MockImageService implements ImageService {
     '641070612_W4_F1_T100_P94_I488_A29.tif',
   ];
 
-  // Cache for converted PNG bytes
+  // Cache for fetched TIFF bytes
   final Map<String, Uint8List> _imageCache = {};
 
   // Mock grid images (representing different Well/Field combinations)
@@ -73,11 +73,25 @@ class MockImageService implements ImageService {
   }
 
   @override
-  Future<Uint8List?> getImageBytes(String imageId) async {
-    // Check cache first
-    if (_imageCache.containsKey(imageId)) {
-      return _imageCache[imageId];
+  Future<DecodedImage?> getDecodedImage(String imageId) async {
+    final tiffBytes = await _getTiffBytes(imageId);
+    if (tiffBytes == null) return null;
+    return TiffConverter.tiffToImage(tiffBytes);
+  }
+
+  @override
+  Future<void> prefetchImage(String imageId) async {
+    if (_imageCache.containsKey(imageId)) return;
+    try {
+      await _getTiffBytes(imageId);
+    } catch (_) {
+      // Best-effort.
     }
+  }
+
+  Future<Uint8List?> _getTiffBytes(String imageId) async {
+    final cached = _imageCache[imageId];
+    if (cached != null) return cached;
 
     try {
       // Construct URL for TIFF file
@@ -91,22 +105,11 @@ class MockImageService implements ImageService {
         return null;
       }
 
-      print('MockImageService: Fetched ${tiffBytes.length} bytes, converting to PNG');
-
-      // Convert TIFF to PNG
-      final pngBytes = TiffConverter.tiffToPng(tiffBytes);
-      if (pngBytes == null) {
-        print('MockImageService: Failed to convert TIFF to PNG');
-        return null;
-      }
-
-      print('MockImageService: Converted to PNG (${pngBytes.length} bytes)');
-
-      // Cache the result
-      _imageCache[imageId] = pngBytes;
-      return pngBytes;
+      print('MockImageService: Fetched ${tiffBytes.length} bytes');
+      _imageCache[imageId] = tiffBytes;
+      return tiffBytes;
     } catch (e) {
-      print('MockImageService.getImageBytes error: $e');
+      print('MockImageService._getTiffBytes error: $e');
       return null;
     }
   }

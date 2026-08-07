@@ -5,6 +5,7 @@ import 'package:pamsoft_grid_flutter_operator/providers/image_selection_provider
 import 'package:pamsoft_grid_flutter_operator/widgets/grid_canvas.dart';
 import 'package:pamsoft_grid_flutter_operator/utils/image_filters.dart';
 import 'package:pamsoft_grid_flutter_operator/utils/constants.dart';
+import 'package:pamsoft_grid_flutter_operator/utils/tiff_converter.dart';
 
 /// Widget for displaying the TIFF/PNG image with grid overlay.
 class ImageViewer extends StatelessWidget {
@@ -14,7 +15,7 @@ class ImageViewer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<ImageSelectionProvider, SettingsProvider>(
       builder: (context, imageProvider, settingsProvider, child) {
-        final imageBytes = imageProvider.currentImageBytes;
+        final decoded = imageProvider.currentDecodedImage;
         final isLoadingImage = imageProvider.isLoadingImage;
         final currentImage = imageProvider.currentImage;
 
@@ -24,11 +25,18 @@ class ImageViewer extends StatelessWidget {
           );
         }
 
-        // Fixed size container based on TIFF aspect ratio
+        // Size from the decoded image's own dimensions so image sets other
+        // than Evolve3 (552x413) are not squashed into its aspect ratio.
+        // Falls back to the Evolve3 constants until the first decode lands.
+        final width = (decoded?.width ?? AppConstants.imageOriginalWidth) *
+            AppConstants.imageDisplayScale;
+        final height = (decoded?.height ?? AppConstants.imageOriginalHeight) *
+            AppConstants.imageDisplayScale;
+
         return Center(
           child: Container(
-            width: AppConstants.imageContainerWidth,
-            height: AppConstants.imageContainerHeight,
+            width: width.toDouble(),
+            height: height.toDouble(),
             decoration: BoxDecoration(
               color: Colors.black,
               border: Border.all(color: Colors.grey.shade700, width: 1),
@@ -43,7 +51,7 @@ class ImageViewer extends StatelessWidget {
                         brightness: settingsProvider.brightness,
                         contrast: settingsProvider.contrast,
                       ),
-                      child: _buildImage(imageBytes, isLoadingImage),
+                      child: _buildImage(decoded, isLoadingImage),
                     ),
                   ),
                   // Grid overlay - clipped to container bounds.
@@ -66,8 +74,10 @@ class ImageViewer extends StatelessWidget {
     );
   }
 
-  Widget _buildImage(imageBytes, bool isLoading) {
+  Widget _buildImage(DecodedImage? decoded, bool isLoading) {
     if (isLoading) {
+      // "Loading image", not "Converting TIFF": this spinner covers the fetch
+      // as well as the decode, and the fetch is now the slower of the two.
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -75,7 +85,7 @@ class ImageViewer extends StatelessWidget {
             CircularProgressIndicator(color: Colors.white),
             SizedBox(height: 16),
             Text(
-              'Converting TIFF...',
+              'Loading image...',
               style: TextStyle(color: Colors.white70),
             ),
           ],
@@ -83,13 +93,10 @@ class ImageViewer extends StatelessWidget {
       );
     }
 
-    if (imageBytes != null) {
-      return Image.memory(
-        imageBytes,
+    if (decoded != null) {
+      return RawImage(
+        image: decoded.image,
         fit: BoxFit.fill,
-        errorBuilder: (context, error, stackTrace) {
-          return _buildErrorWidget();
-        },
       );
     }
 

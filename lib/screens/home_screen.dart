@@ -75,6 +75,16 @@ class _HomeScreenState extends State<HomeScreen> {
       _lastLoadedImageId = currentImageId;
       gridProvider.loadGrid(currentImageId);
     }
+
+    // Feed the decoded image's real dimensions to the grid, which otherwise
+    // assumes the Evolve3 552x413 and would mis-scale any other image set.
+    final decoded = imageProvider.currentDecodedImage;
+    if (decoded != null) {
+      gridProvider.setImageSize(
+        decoded.width.toDouble(),
+        decoded.height.toDouble(),
+      );
+    }
   }
 
   @override
@@ -235,7 +245,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Consumer2<ImageSelectionProvider, GridProvider>(
       builder: (context, imageProvider, gridProvider, child) {
-        final gridImage = imageProvider.currentGridImage;
+        // The header names the image actually on screen, not the grid image
+        // it belongs to — those diverge as soon as you step through cycles
+        // with the Image < / > buttons.
+        final selectedImage = imageProvider.currentImage;
 
         return Column(
           children: [
@@ -251,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      gridImage?.displayName ?? 'No grid selected',
+                      selectedImage?.displayName ?? 'No image selected',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),

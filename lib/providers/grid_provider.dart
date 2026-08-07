@@ -2,19 +2,33 @@ import 'package:flutter/foundation.dart';
 import 'package:pamsoft_grid_flutter_operator/di/service_locator.dart';
 import 'package:pamsoft_grid_flutter_operator/models/grid_data.dart';
 import 'package:pamsoft_grid_flutter_operator/models/enums.dart';
+import 'package:pamsoft_grid_flutter_operator/models/grid_configuration.dart';
+import 'package:pamsoft_grid_flutter_operator/models/operator_properties.dart';
 import 'package:pamsoft_grid_flutter_operator/services/grid_service.dart';
 import 'package:pamsoft_grid_flutter_operator/services/image_service.dart';
+import 'package:pamsoft_grid_flutter_operator/services/properties_service.dart';
 import 'dart:math' as math;
 
 /// Provider for managing grid state and interactions.
 class GridProvider extends ChangeNotifier {
   final GridService _gridService = locator<GridService>();
+  final PropertiesService _propertiesService = locator<PropertiesService>();
 
   GridData? _currentGridData;
   String? _currentGridImageId;
   bool _isLoading = false;
   bool _isProcessing = false;
   String? _error;
+
+  OperatorProperties? _properties;
+
+  /// Dimensions of the image currently on screen, once one has been decoded.
+  ///
+  /// The grid coordinates from Tercen are in image pixels, so the overlay's
+  /// scale is only right when the configuration carries the real dimensions —
+  /// they used to be hardcoded to the Evolve3 552x413.
+  double? _imageWidth;
+  double? _imageHeight;
 
   GridData? get currentGridData => _currentGridData;
   String? get currentGridImageId => _currentGridImageId;
@@ -36,13 +50,56 @@ class GridProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _currentGridData = await _gridService.loadGridData(gridImageId);
+      _properties ??= await _propertiesService.getProperties();
+      // Mutate in place rather than copyWith: the grid service hands out a
+      // cached instance, and edits made through this provider are expected to
+      // land on that same object.
+      final data = await _gridService.loadGridData(gridImageId);
+      data.configuration = _applyProperties(data.configuration);
+      _currentGridData = data;
     } catch (e) {
       _error = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Records the dimensions of the decoded image on screen.
+  ///
+  /// Called once the image is decoded, which may be after the grid loads, so
+  /// the configuration is rebuilt when they arrive or change.
+  void setImageSize(double width, double height) {
+    if (_imageWidth == width && _imageHeight == height) return;
+    _imageWidth = width;
+    _imageHeight = height;
+
+    final data = _currentGridData;
+    if (data == null) return;
+    data.configuration = _applyProperties(data.configuration);
+    notifyListeners();
+  }
+
+  /// Folds the operator properties and the real image dimensions into a
+  /// configuration loaded from the grid service.
+  GridConfiguration _applyProperties(GridConfiguration base) {
+    final props = _properties ?? OperatorProperties.defaults;
+    final width = _imageWidth ?? base.imageWidth;
+    final height = _imageHeight ?? base.imageHeight;
+    final dimensionsChanged =
+        width != base.imageWidth || height != base.imageHeight;
+
+    return base.copyWith(
+      spotPitch:
+          OperatorProperties.resolveSpotPitch(props.spotPitch, width, height),
+      spotSize: props.spotSize,
+      imageWidth: width,
+      imageHeight: height,
+      // Both construction sites centre the grid in the image; keep that true
+      // if the dimensions turn out to differ from what the service assumed.
+      centerX: dimensionsChanged ? width / 2 : base.centerX,
+      centerY: dimensionsChanged ? height / 2 : base.centerY,
+    );
   }
 
   /// Moves the entire grid by an offset.

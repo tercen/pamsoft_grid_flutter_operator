@@ -21,7 +21,20 @@ class TercenImageService implements ImageService {
 
   // Cache for loaded data
   ExperimentData? _cachedData;
-  final Map<String, Uint8List> _imageCache = {};
+
+  /// Cache of raw TIFF bytes keyed by image id, most-recently-used last.
+  ///
+  /// Raw TIFFs are cached rather than decoded pixels: fetching is what costs
+  /// (decoding is ~8 ms), and a decoded RGBA buffer is ~11x the size of the
+  /// source TIFF, which would make an unbounded cache untenable across a full
+  /// plate. Bounded so that stepping through every cycle of every well cannot
+  /// grow without limit — the previous cache had no bound at all.
+  final Map<String, Uint8List> _tiffCache = {};
+  static const int _maxCachedTiffs = 24;
+
+  /// In-flight fetches, so a prefetch and a real read of the same image share
+  /// one request instead of racing.
+  final Map<String, Future<Uint8List?>> _inFlight = {};
 
   // The Tercen FileDocument id for the ZIP and a map from image id (parsed
   // from filename) to ZIP entry path. The ZIP itself is never downloaded;
@@ -178,13 +191,15 @@ class TercenImageService implements ImageService {
     }
   }
 
-  /// Extracts peptide number from image name (5th underscore part).
+  /// Extracts the cycle number from an image name (5th underscore part).
   /// e.g., "641031403_W1_F1_T100_P94_I473_A29" → 94
-  static int _extractPeptideNumber(String imageName) {
+  ///
+  /// Matches Shiny's `get_image_list()`, which reads the same field as `cyc`.
+  static int _extractCycleNumber(String imageName) {
     final parts = imageName.split('_');
     if (parts.length > 4) {
-      final peptide = parts[4]; // e.g., "P94"
-      return int.tryParse(peptide.substring(1)) ?? 0;
+      final cycle = parts[4]; // e.g., "P94"
+      return int.tryParse(cycle.substring(1)) ?? 0;
     }
     return 0;
   }
@@ -206,7 +221,7 @@ class TercenImageService implements ImageService {
       // Use Tercen data for grouping (matching Shiny behavior).
       // Grid images = unique grdImageNameUsed values from Tercen cselect.
       // Image list per grid = Image values where grdImageNameUsed == selected,
-      //   sorted: grid image first, then others by peptide number descending.
+      //   sorted: grid image first, then others by cycle number descending.
       for (final gridName in tercenGrouping.keys) {
         final metadata = metadataById[gridName];
         if (metadata == null) {
@@ -218,15 +233,15 @@ class TercenImageService implements ImageService {
 
         // Get associated images, matching Shiny's get_image_list():
         // 1. Remove grid image from list
-        // 2. Sort remaining by peptide number descending
+        // 2. Sort remaining by cycle number descending
         // 3. Prepend grid image at front
         final associatedNames = tercenGrouping[gridName]!;
         final others = associatedNames.where((n) => n != gridName).toList();
 
-        // Sort by peptide number descending (Shiny: decreasing = TRUE)
+        // Sort by cycle number descending (Shiny: decreasing = TRUE)
         others.sort((a, b) {
-          final aNum = _extractPeptideNumber(a);
-          final bNum = _extractPeptideNumber(b);
+          final aNum = _extractCycleNumber(a);
+          final bNum = _extractCycleNumber(b);
           return bNum.compareTo(aNum);
         });
 
@@ -286,13 +301,48 @@ class TercenImageService implements ImageService {
   }
 
   @override
-  Future<Uint8List?> getImageBytes(String imageId) async {
-    // Return cached PNG bytes if available
-    if (_imageCache.containsKey(imageId)) {
-      print('  ✓ Returning cached image: $imageId');
-      return _imageCache[imageId];
+  Future<DecodedImage?> getDecodedImage(String imageId) async {
+    final tiffData = await _getTiffBytes(imageId);
+    if (tiffData == null) return null;
+
+    final decoded = await TiffConverter.tiffToImage(tiffData);
+    if (decoded == null) {
+      print('    ✗ Failed to decode TIFF for $imageId');
+    }
+    return decoded;
+  }
+
+  @override
+  Future<void> prefetchImage(String imageId) async {
+    if (_tiffCache.containsKey(imageId) || _inFlight.containsKey(imageId)) {
+      return;
+    }
+    try {
+      await _getTiffBytes(imageId);
+    } catch (_) {
+      // Prefetch is best-effort — the real read will report any failure.
+    }
+  }
+
+  /// Fetches the raw TIFF for [imageId], from cache when possible.
+  Future<Uint8List?> _getTiffBytes(String imageId) {
+    final cached = _tiffCache.remove(imageId);
+    if (cached != null) {
+      _tiffCache[imageId] = cached; // reinsert as most-recently-used
+      return Future.value(cached);
     }
 
+    final existing = _inFlight[imageId];
+    if (existing != null) return existing;
+
+    final future = _fetchTiffBytes(imageId).whenComplete(() {
+      _inFlight.remove(imageId);
+    });
+    _inFlight[imageId] = future;
+    return future;
+  }
+
+  Future<Uint8List?> _fetchTiffBytes(String imageId) async {
     // Ensure metadata is loaded
     if (_loadedDocumentId == null) {
       print('  Loading experiment data first...');
@@ -328,20 +378,19 @@ class TercenImageService implements ImageService {
         offset += chunk.length;
       }
 
-      print('    Converting TIFF (${tiffData.length} bytes)');
-      final pngBytes = TiffConverter.tiffToPng(tiffData);
-
-      if (pngBytes != null) {
-        _imageCache[imageId] = pngBytes;
-        print('    ✓ Converted to PNG (${pngBytes.length} bytes)');
-        return pngBytes;
-      } else {
-        print('    ✗ Failed to convert TIFF to PNG');
-        return null;
-      }
+      _cacheTiff(imageId, tiffData);
+      print('    ✓ Fetched TIFF (${tiffData.length} bytes)');
+      return tiffData;
     } catch (e) {
-      print('  ✗ Error fetching/converting ZIP entry $entryPath: $e');
+      print('  ✗ Error fetching ZIP entry $entryPath: $e');
       return null;
+    }
+  }
+
+  void _cacheTiff(String imageId, Uint8List bytes) {
+    _tiffCache[imageId] = bytes;
+    while (_tiffCache.length > _maxCachedTiffs) {
+      _tiffCache.remove(_tiffCache.keys.first); // evict least-recently-used
     }
   }
 

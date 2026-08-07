@@ -7,7 +7,11 @@ class GridData {
   final String gridImageId;
 
   /// Grid configuration parameters (spotPitch, spotSize, center, etc.).
-  final GridConfiguration configuration;
+  ///
+  /// Mutable because the operator properties and the image's real dimensions
+  /// only become known after the grid service has built this object, and the
+  /// service hands out a cached instance that callers mutate in place.
+  GridConfiguration configuration;
 
   /// All fiducial positions in the grid.
   final List<FiducialPosition> fiducials;

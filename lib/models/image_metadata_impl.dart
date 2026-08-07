@@ -54,6 +54,12 @@ class ImageMetadataImpl implements ImageMetadata {
   String get displayName => id;
 
   @override
+  int get cycle {
+    if (position.length < 2) return 0;
+    return int.tryParse(position.substring(1)) ?? 0;
+  }
+
+  @override
   ImageMetadata copyWith({bool? isGridImage, Uint8List? imageBytes}) {
     return ImageMetadataImpl(
       id: id,

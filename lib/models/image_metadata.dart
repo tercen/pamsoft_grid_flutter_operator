@@ -20,8 +20,15 @@ abstract class ImageMetadata {
   /// Time point (T5, T10, T25, T50, T100).
   String get timePoint;
 
-  /// Position identifier.
+  /// Position identifier, e.g. `P94`.
   String get position;
+
+  /// Cycle number parsed from [position], e.g. `P94` yields 94.
+  ///
+  /// This is the 5th underscore-separated field of the filename — the same
+  /// field Shiny's `get_image_list()` reads as `cyc` when it sorts the image
+  /// list. Returns 0 when the filename does not carry a parseable cycle.
+  int get cycle;
 
   /// Image number in sequence.
   String get imageNumber;

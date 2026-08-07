@@ -246,11 +246,16 @@ class GridPainter extends CustomPainter {
       final displayY = (fiducial.y + gridData.globalOffsetY) * scaleY;
       final center = Offset(displayX, displayY);
 
-      // Use fiducial's diameter if available, otherwise use default
+      // Prefer the segmented diameter carried by the data. Where there is
+      // none, fall back to the radius implied by the Spot Pitch and Spot Size
+      // operator properties — Shiny's `off <- (spotPitch * spotSize)/2` —
+      // rather than a fixed pixel count that ignores the image set.
       double radius;
       if (fiducial.diameter > 0) {
         // Scale the radius from image coordinates to display coordinates
         radius = (fiducial.diameter / 2) * scaleX;
+      } else if (config.spotRadius > 0) {
+        radius = config.spotRadius * scaleX;
       } else {
         radius = AppConstants.fiducialRadius;
       }
