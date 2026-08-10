@@ -19,19 +19,19 @@
       "kind": "DoubleProperty",
       "name": "Min Diameter",
       "defaultValue": 0.45,
-      "description": "Minimum spot diameter, as a fraction of the spot pitch."
+      "description": "NOT USED BY THIS OPERATOR. Minimum spot diameter, applied when the gridding operator segments spots. The checker only displays the diameter gridding already measured, so changing this here has no effect. Kept so the setting is preserved through the workflow."
     },
     {
       "kind": "DoubleProperty",
       "name": "Max Diameter",
       "defaultValue": 0.85,
-      "description": "Maximum spot diameter, as a fraction of the spot pitch."
+      "description": "NOT USED BY THIS OPERATOR. Maximum spot diameter, applied when the gridding operator segments spots. Changing this here has no effect. Kept so the setting is preserved through the workflow."
     },
     {
       "kind": "DoubleProperty",
       "name": "Saturation Limit",
       "defaultValue": 4095,
-      "description": "Intensity above which a pixel counts as saturated."
+      "description": "NOT USED BY THIS OPERATOR. Intensity above which a pixel counts as saturated, applied by the gridding and quantification steps. Changing this here has no effect. Kept so the setting is preserved through the workflow."
     },
     {
       "kind": "DoubleProperty",
@@ -43,13 +43,13 @@
       "kind": "DoubleProperty",
       "name": "EdgeSensitivityLow",
       "defaultValue": 0,
-      "description": "Lower bound of the edge sensitivity range."
+      "description": "NOT USED BY THIS OPERATOR. Lower bound of the edge sensitivity range, used by the gridding operator's segmentation. Changing this here has no effect. Kept so the setting is preserved through the workflow."
     },
     {
       "kind": "DoubleProperty",
       "name": "Edge Sensitivity",
       "defaultValue": 0.05,
-      "description": "Upper bound of the edge sensitivity range."
+      "description": "NOT USED BY THIS OPERATOR. Upper bound of the edge sensitivity range, used by the gridding operator's segmentation. Changing this here has no effect. Kept so the setting is preserved through the workflow."
     },
     {
       "kind": "DoubleProperty",
@@ -65,13 +65,13 @@
         "Edge",
         "Hough"
       ],
-      "description": ""
+      "description": "NOT USED BY THIS OPERATOR. Spot segmentation algorithm used by the gridding operator. Changing this here has no effect. Kept so the setting is preserved through the workflow."
     },
     {
       "kind": "StringProperty",
       "name": "Rotation",
       "defaultValue": "-2:0.25:2",
-      "description": "Template rotation range in the format min:step:max (eg. -2:0.25:2) or 0 to perform intensity based registration."
+      "description": "NOT USED BY THIS OPERATOR. Template rotation range for the gridding operator, in the format min:step:max (eg. -2:0.25:2), or 0 to perform intensity based registration. Changing this here has no effect. Kept so the setting is preserved through the workflow."
     },
     {
       "kind": "StringProperty",

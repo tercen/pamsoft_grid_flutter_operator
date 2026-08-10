@@ -137,11 +137,16 @@ class TercenGridService implements GridService {
 
     print('✓ Data map: ${dataMap.length} spots, $qtRowsLoaded total rows');
 
-    // Build image lookup: imageName -> list of ci indices
+    // Build image lookup: imageName -> list of ci indices.
+    // Without this, every grid load scans the whole dataset to pick out one
+    // image's spots — O(images x spots) per load to return O(spots).
     final allImages = <String>{};
-    for (final meta in colMetadata.values) {
-      final img = meta['Image']?.toString();
-      if (img != null) allImages.add(img);
+    final ciByImage = <String, List<int>>{};
+    for (final entry in colMetadata.entries) {
+      final img = entry.value['Image']?.toString();
+      if (img == null) continue;
+      allImages.add(img);
+      ciByImage.putIfAbsent(img, () => <int>[]).add(entry.key);
     }
     print('✓ Unique images in data: ${allImages.length}');
 
@@ -150,6 +155,7 @@ class TercenGridService implements GridService {
       rowMetadata: rowMetadata,
       dataMap: dataMap,
       allImages: allImages,
+      ciByImage: ciByImage,
     );
     return _tercenData!;
   }
@@ -200,15 +206,15 @@ class TercenGridService implements GridService {
     final fiducials = <FiducialPosition>[];
 
     if (resolvedImageName != null) {
-      for (final entry in data.dataMap.entries) {
-        final ci = entry.key;
-        final riYMap = entry.value;
+      // Only this image's spots, via the ciByImage index.
+      for (final ci in data.ciByImage[resolvedImageName] ?? const <int>[]) {
+        final riYMap = data.dataMap[ci];
+        if (riYMap == null) continue;
 
         final colMeta = data.colMetadata[ci];
         if (colMeta == null) continue;
 
         final imageName = colMeta['Image']?.toString() ?? '';
-        if (imageName != resolvedImageName) continue;
 
         final spotRow = (colMeta['spotRow'] as num?)?.toDouble() ?? 0.0;
         final spotCol = (colMeta['spotCol'] as num?)?.toDouble() ?? 0.0;
@@ -529,11 +535,16 @@ class _TercenDataCache {
   /// All unique image names found in the data.
   final Set<String> allImages;
 
+  /// Image name -> the ci indices belonging to that image, so a grid load
+  /// touches only its own spots instead of scanning every ci in the dataset.
+  final Map<String, List<int>> ciByImage;
+
   _TercenDataCache({
     required this.colMetadata,
     required this.rowMetadata,
     required this.dataMap,
     required this.allImages,
+    required this.ciByImage,
   });
 }
 

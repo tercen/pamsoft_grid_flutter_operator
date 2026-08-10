@@ -98,8 +98,11 @@ class ImageSelectionProvider extends ChangeNotifier {
   ///
   /// The image list is built grid-image-first, then remaining cycles
   /// descending, so index 0 is always the grid image.
-  int _defaultImageIndex() {
-    final images = currentGridImages;
+  int _defaultImageIndex() => _defaultImageIndexFor(currentGridImages);
+
+  /// [_defaultImageIndex] for an arbitrary image list, so the choice can also
+  /// be computed for a grid that is not the current one (used by prefetch).
+  int _defaultImageIndexFor(List<ImageMetadata> images) {
     if (images.isEmpty) return 0;
 
     final spec = _properties.defaultCycle.trim().toLowerCase();
@@ -163,15 +166,34 @@ class ImageSelectionProvider extends ChangeNotifier {
     if (token == _loadToken) _prefetchNeighbours();
   }
 
-  /// Warms the cache for the images either side of the selection.
+  /// Warms the cache for the images the user is most likely to ask for next:
+  /// the cycles either side of the selection, and the image that opening an
+  /// adjacent grid would land on.
+  ///
+  /// Without the second part, every Grid << / >> hits the network cold, which
+  /// is why grid changes felt slower than image changes even after the decode
+  /// cost was removed.
   void _prefetchNeighbours() {
+    // Deliberately not awaited — these run behind the current image, and the
+    // image service collapses duplicate in-flight requests.
     final images = currentGridImages;
     for (final offset in const [1, -1]) {
       final index = _currentImageIndex + offset;
       if (index >= 0 && index < images.length) {
-        // Deliberately not awaited — this runs behind the current image.
         _imageService.prefetchImage(images[index].id);
       }
+    }
+
+    final data = _experimentData;
+    if (data == null) return;
+    for (final offset in const [1, -1]) {
+      final gridIndex = _currentGridIndex + offset;
+      if (gridIndex < 0 || gridIndex >= data.gridImages.length) continue;
+      final gridImages = data.imagesByGrid[data.gridImages[gridIndex].id];
+      if (gridImages == null || gridImages.isEmpty) continue;
+      _imageService.prefetchImage(
+        gridImages[_defaultImageIndexFor(gridImages)].id,
+      );
     }
   }
 
