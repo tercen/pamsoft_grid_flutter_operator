@@ -72,4 +72,15 @@ After pushing, verify the version appears correctly:
 
 ## Current Version
 
-**0.0.1** - Initial release with grid rotation feature
+**0.0.5** - Warnings on the operator properties the checker does not act on;
+faster grid-to-grid navigation.
+
+### History
+
+| Version | Notes |
+|---------|-------|
+| 0.0.5 | Inert-setting warnings in README and `operator.json`; cross-grid image prefetch; `ciByImage` index for grid loads |
+| 0.0.4 | Client feedback: header names the displayed image, `Default Cycle` property, nine operator properties restored, image display ~146ms → ~8ms, Evolve2 dimensions |
+| 0.0.3 | `table.limit` paging for large datasets |
+| 0.0.2 | Never tagged |
+| 0.0.1 | Initial release with grid rotation feature |
