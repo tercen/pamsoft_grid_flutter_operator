@@ -1,3 +1,19 @@
+> [!IMPORTANT]
+> **This repository is archived. Development moved to
+> [pamgene/pamsoft_grid_flutter_operator](https://github.com/pamgene/pamsoft_grid_flutter_operator).**
+>
+> This copy is frozen at **0.0.5**; the live repository is several releases
+> ahead (0.0.11 at the time of archiving) and is what Tercen workflows install.
+> Fixes for the two issues open here landed there:
+>
+> | Issue here | Fixed in pamgene |
+> |---|---|
+> | #5 — result columns serialised twice (`values` + `cValues`) | PR #8, `84d1a6f` (0.0.11) — measured 144.7 MB → 71.8 MB uploaded, same result |
+> | #4 — all grid data loads on first open | `24cd64b` (0.0.9) — background load with progress |
+>
+> The URL is kept resolvable because production still has operators installed
+> from it. Do not develop here; open issues and pull requests against pamgene.
+
 # Pamsoft Grid Checker
 
 A Flutter desktop/web application for quality control review of automated fiducial grid fitting on Pamstation experiment TIFF images.
